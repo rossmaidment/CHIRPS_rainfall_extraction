@@ -1,23 +1,25 @@
 """
-Download ARCv2.0 rainfall estimates.
+Download CHIRPS rainfall estimates.
 
-This script downloads ARCv2.0 rainfall estimates in binary format.
+This script downloads daily, global CHIRPS rainfall estimates in netCDF format.
+
+Author: R. Maidment.
 """
 
 import os
+import numpy as np
 import wget
 from datetime import datetime as dt
-from datetime import timedelta as td
 import config
 
     
 def get_filenames(remoteurl, daterange):
-    """Constructs list of ARCv2.0 filenames given list of dates.
+    """Constructs list of CHIRPS filenames given list of dates.
     
     Parameters
     ----------
     remoteurl : str
-        URL of ARCv2.0 rainfall files.
+        URL of where CHIPRS rainfall files are accessed.
     daterange : list
         List of dates in datetime object.
     
@@ -28,22 +30,20 @@ def get_filenames(remoteurl, daterange):
     """
     files_to_download = []
     for date in daterange:
-        yyyy = "{:0>4}".format(date.year)
-        mm = "{:0>2}".format(date.month)
-        dd = "{:0>2}".format(date.day)
-        files_to_download.append(os.path.join(remoteurl, 'daily_clim.bin.' + yyyy + mm + dd + '.gz'))
+        yyyy = str(date)
+        files_to_download.append(os.path.join(remoteurl, 'chirps-v2.0.' + yyyy + '.days_p05.nc'))
     
     return(files_to_download)
 
 
-def download_files(files_to_download, localdata_dir):
-    """Download ARCv2.0 files.
+def download_files(files_to_download, localdatadir):
+    """Download CHIRPS files.
     
     Parameters
     ----------
     files_to_download : list
         List of filenames to process
-    localdata_dir : str
+    localdatadir : str
         Local path to store downloaded file.
     
     Returns
@@ -54,18 +54,20 @@ def download_files(files_to_download, localdata_dir):
     for url_file in files_to_download:
         
         # Check if local directory exists, if not, create
-        if not os.path.exists(localdata_dir):
-            os.makedirs(localdata_dir)
+        if not os.path.exists(localdatadir):
+            os.makedirs(localdatadir)
         
         # Only download if file does not exist locally
-        os.chdir(localdata_dir)
-        local_file = os.path.join(localdata_dir, os.path.basename(url_file))
+        os.chdir(localdatadir)
+        local_file = os.path.join(localdatadir, os.path.basename(url_file))
         if not os.path.exists(local_file):
             try:
                 filename = wget.download(url_file)
                 print('Downloaded file: %s' % filename)
             except:
                 print('Unable to download file: %s' % url_file)
+        else:
+            print('File already downloaded: %s' % local_file)
 
 
 def determine_files_to_download(startdate, enddate):
@@ -81,13 +83,14 @@ def determine_files_to_download(startdate, enddate):
     Returns
     -------
     list
-        ARCv2.0 files to download.
+        CHIRPS files to download.
     
     """
     # Determine dates to download
     startdate = dt.strptime(startdate, "%Y-%m-%d")
     enddate = dt.strptime(enddate, "%Y-%m-%d")
-    daterange = [startdate + td(n) for n in range(int((enddate - startdate).days))]
+    daterange = np.arange(startdate.year, enddate.year + 1)
+    #daterange = [startdate + td(n) for n in range(int((enddate - startdate).days))]
     
     return(daterange)
 
@@ -98,10 +101,13 @@ def download():
     daterange = determine_files_to_download(config.startdate, config.enddate)
     
     # Get list of files to download
-    files_to_download = get_filenames(config.remoteurl, daterange)
+    if config.product == 'final':
+        files_to_download = get_filenames(config.remoteurl_final, daterange)
+    elif config.product == 'prelim':
+        files_to_download = get_filenames(config.remoteurl_prelim, daterange)
     
     # Download files
-    download_files(files_to_download, os.path.join(config.localdata_dir, 'bin'))
+    download_files(files_to_download, os.path.join(config.datadir, 'netcdf', config.product))
 
 
 if __name__ in '__main__':

@@ -1,5 +1,5 @@
 """
-Extract ARCv2.0 rainfall estimates.
+Extract CHIRPS rainfall estimates.
 
 This script extracts area-average values for a given rectangular domain and
 saves the output in CSV format.
@@ -24,7 +24,7 @@ def extract_rfe(filename, df):
     Parameters
     ----------
     filename : str
-        ARCv2.0 file in netCDF format.
+        CHIRPS file in netCDF format.
     df : pandas dataframe
         Dataframe storing coordinates of areas to extract. Must contain columns
         labeled 'N', 'S', 'W' and 'E' which contain the coordinates of the area(s)
@@ -41,21 +41,22 @@ def extract_rfe(filename, df):
     ds = xr.open_dataset(filename)
     fname = os.path.basename(filename)
     print('Extracting from file: %s' % fname)
-    ts = fname[7:15]
     
-    # Add column for TAMSAT values
+    # Extract times and create empty dataframe with columns headings as the date
+    ts_list = [dt.strftime(pd.to_datetime(x).date(), '%Y-%m-%d') for x in ds.time.values]
+    df_out = pd.DataFrame(index=np.arange(df.shape[0]), columns=ts_list)
+    
+    # Copy dataframe
     dfc = df.copy()
-    dfc[ts] = np.nan
     
-    # Extract area-average for each grid
-    value = list()
+    # Extract area-average precipitation
     for index, row in dfc.iterrows():
-        ds_sub = ds.sel(lon=slice(row.W, row.E), lat=slice(row.S, row.N))
-        value.append("{:.1f}".format(np.round(np.nanmean(ds_sub.rfe.values.squeeze()), 1)))
+        df_out.iloc[index] = ds.sel(longitude=slice(row.W, row.E), latitude=slice(row.S, row.N)).mean(dim=['longitude', 'latitude']).to_dataframe().precip
     
-    dfc[ts] = value
+    # Merge with latlon dataframe
+    #df_out = pd.concat([dfc, df_rfe], axis=1)
     
-    return dfc
+    return df_out
 
 
 def determine_files_to_extract(startdate, enddate):
@@ -77,15 +78,17 @@ def determine_files_to_extract(startdate, enddate):
     # Determine dates to download
     startdate = dt.strptime(config.startdate, "%Y-%m-%d")
     enddate = dt.strptime(config.enddate, "%Y-%m-%d")
-    daterange = [startdate + td(n) for n in range(int((enddate - startdate).days))]
-    
+    daterange = np.arange(startdate.year, enddate.year + 1)
+        
     # List netCDF files for only dates of interest
     filelist = []
-    for root, dirs, files in os.walk(os.path.join(config.localdata_dir, 'netcdf')):
+    for root, dirs, files in os.walk(os.path.join(config.datadir, 'netcdf', config.product)):
         for f in files:
-            if dt.strptime(os.path.basename(f)[7:15], '%Y%m%d') in daterange:
-                filelist.append((os.path.join(root, f)))
+            if f != '.DS_Store':
+                if int(os.path.basename(f)[12:16]) in daterange:
+                    filelist.append((os.path.join(root, f)))
     
+    filelist.sort()
     return(filelist)
 
 
@@ -96,7 +99,6 @@ def extract():
     
     # Read in latlonfile
     df = pd.read_csv(config.latlon_file)
-    df = df.round(4)
     
     # Extract and concatenate
     rfe = []
@@ -104,21 +106,29 @@ def extract():
         dfrfe = extract_rfe(rfefile, df)
         rfe.append(dfrfe)
     
-    rfe_ = []
-    for r in rfe:
-        rfe_.append(r.iloc[:, -1])
+    # Merge rainfall values into dataframe and crop to date range
+    df_rfe = pd.concat(rfe, axis=1)
+    daterange = [dt.strftime(x, '%Y-%m-%d') for x in pd.date_range(start=config.startdate, end=config.enddate, freq='D')]
+    try:
+        df_rfe = df_rfe[daterange].astype(float).round(1)
+    except:
+        print('Warning - not all dates found!')
     
-    all = pd.concat([df, pd.concat(rfe_, axis=1)], axis=1)
+    print('First date: %s' % df_rfe.columns[0])
+    print('Last date: %s' % df_rfe.columns[-1])
+    
+    # Merge into single dataframe
+    df_all = pd.concat([df, df_rfe], axis=1)
     
     # Create output directory if it doesn't exist
-    localoutput_dir = os.path.join(config.localdata_dir, 'output')
+    localoutput_dir = os.path.join(config.datadir, 'output', config.product)
     if not os.path.exists(localoutput_dir):
         os.makedirs(localoutput_dir)
     
     # Export to CSV file
-    fname = os.path.join(localoutput_dir, 'arc2.0_' + config.startdate.replace('-', '') \
+    fname = os.path.join(localoutput_dir, 'chirps2.0-' + config.product + '_' + config.startdate.replace('-', '') \
         + '-' + config.enddate.replace('-', '') + '_' + config.tag + '.csv')
-    all.to_csv(fname, index=False)
+    df_all.to_csv(fname, index=False)
     
     # Check if it's been created
     if os.path.exists(fname):
@@ -126,7 +136,7 @@ def extract():
         print('Success! Created file: %s ' % fname)
         print('')
         print('This is a sample of the extracted daily rainfall values in this file ...')
-        print(all.head())
+        print(df_all.head())
         print('--------------------------------------------------------------------------')
     else:
         print('Warning! File not created: %s ' % fname)
