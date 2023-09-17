@@ -1,5 +1,5 @@
 """
-Configuration file for downloading and processing ARCv2.0 rainfall estimates.
+Configuration file for downloading and processing CHIRPS rainfall estimates.
 
 This is the only file users should interact with.
 """
@@ -12,6 +12,9 @@ enddate = '2023-01-15'
 
 # Tag to assign to extracted files (e.g. 'test')
 tag = 'test_2'
+
+# Name of CSV file containing coordinates of each location
+latlon_file = 'cambodia_locations.csv'
 
 # CHIRPS product ('final' or 'prelim')
 product = 'prelim'
@@ -29,7 +32,7 @@ remoteurl_prelim = 'https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_
 datadir = os.path.join(workingdir, 'data')
 
 # File containing coordinates of areas to extract rainfall for. Must contain columns 'N', 'S', 'W', 'E'
-latlon_file = os.path.join(workingdir, 'coordinates', 'cambodia_locations.csv')
+latlon_file = os.path.join(workingdir, 'coordinates', latlon_file)
 
 
 
