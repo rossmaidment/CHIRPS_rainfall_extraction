@@ -9,7 +9,6 @@ saves the output in CSV format.
 import os
 import numpy as np
 from datetime import datetime as dt
-from datetime import timedelta as td
 import xarray as xr
 import pandas as pd
 import config
